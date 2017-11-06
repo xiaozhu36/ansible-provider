@@ -1,5 +1,5 @@
 #!/usr/bin/python
-# Copyright (c) 2017 Alibaba Group Holding Limited. He Guimin <heguimin36@163.com.com>
+# Copyright (c) 2017 Alibaba Group Holding Limited. He Guimin <heguimin36@163.com>
 # GNU General Public License v3.0+ (see COPYING or https://www.gnu.org/licenses/gpl-3.0.txt)
 #
 #  This file is part of Ansible
@@ -20,14 +20,14 @@
 from __future__ import absolute_import, division, print_function
 __metaclass__ = type
 
-ANSIBLE_METADATA = {'metadata_version': '1.0',
+ANSIBLE_METADATA = {'metadata_version': '1.1',
                     'status': ['preview'],
                     'supported_by': 'community'}
 
 DOCUMENTATION = '''
 ---
 module: alicloud_instance_facts
-version_added: "2.4"
+version_added: "2.5"
 short_description: Gather facts on instances of Alibaba Cloud ECS.
 description:
      - This module fetches data from the Open API in Alicloud.
@@ -37,7 +37,7 @@ options:
     alicloud_zone:
       description:
         - Aliyun availability zone ID in which to launch the instance
-      aliases: ['acs_zone', 'ecs_zone', 'zone_id', 'zone' ]
+      aliases: [ 'zone_id', 'zone' ]
     instance_names:
       description:
         - A list of ECS instance names.
@@ -50,7 +50,7 @@ author:
     - "He Guimin (@xiaozhu36)"
 requirements:
     - "python >= 2.6"
-    - "footmark"
+    - "footmark >= 1.1.14"
 extends_documentation_fragment:
     - alicloud
 '''
@@ -89,7 +89,7 @@ instance_ids:
     description: List all instances's id after operating ecs instance.
     returned: when success
     type: list
-    sample: ["i-35b333d9","i-ddav***"]
+    sample: ["i-2ze9zfjdhtasdrfbgay1"]
 instances:
     description: Details about the ecs instances that were created.
     returned: when success
@@ -118,6 +118,7 @@ instances:
         "instance_name": "test-instance",
         "instance_type": "ecs.n1.small",
         "io_optimized": true,
+        "key_name": "test",
         "launch_time": "2017-05-23T00:56Z",
         "private_ip": "10.31.153.209",
         "public_ip": "47.94.45.175",
@@ -140,11 +141,11 @@ total:
     description: The number of all instances after operating ecs instance.
     returned: when success
     type: int
-    sample: 3
+    sample: 1
 '''
 
-import time
-import sys
+# import time
+# import sys
 from ansible.module_utils.basic import AnsibleModule
 from ansible.module_utils.alicloud_ecs import get_acs_connection_info, ecs_argument_spec, ecs_connect
 
@@ -177,7 +178,8 @@ def get_instance_info(inst):
                      'tags': inst.tags,
                      'vpc_attributes': inst.vpc_attributes,
                      'eip': inst.eip_address,
-                     'io_optimized': inst.io_optimized
+                     'io_optimized': inst.io_optimized,
+                     'key_name': inst.key_name
                      }
     try:
         bdm_dict = {}
@@ -196,43 +198,43 @@ def get_instance_info(inst):
 
 
 def main():
+    argument_spec = ecs_argument_spec()
+    argument_spec.update(dict(
+        alicloud_zone=dict(aliases=['zone_id', 'zone']),
+        instance_ids=dict(type='list', aliases=['ids']),
+        instance_names=dict(type='list', aliases=['names']),
+        instance_tags=dict(type='list', aliases=['tags']),
+    )
+    )
+    module = AnsibleModule(argument_spec=argument_spec)
+
     if HAS_FOOTMARK is False:
-        module.fail_json(msg='footmark required for this module')
-    else:
-        argument_spec = ecs_argument_spec()
-        argument_spec.update(dict(
-            alicloud_zone=dict(aliases=['acs_zone', 'ecs_zone', 'zone_id', 'zone']),
-            instance_ids=dict(type='list', aliases=['ids']),
-            instance_names=dict(type='list', aliases=['names']),
-            instance_tags=dict(type='list', aliases=['tags']),
-        )
-        )
-        module = AnsibleModule(argument_spec=argument_spec)
+        module.fail_json(msg='footmark required for the module alicloud_instance_facts')
 
-        ecs = ecs_connect(module)
+    ecs = ecs_connect(module)
 
-        instances = []
-        instance_ids = []
-        ids = module.params['instance_ids']
-        names = module.params['instance_names']
-        zone_id = module.params['alicloud_zone']
-        if ids and (not isinstance(ids, list) or len(ids)) < 1:
-            module.fail_json(msg='instance_ids should be a list of instances, aborting')
+    instances = []
+    instance_ids = []
+    ids = module.params['instance_ids']
+    names = module.params['instance_names']
+    zone_id = module.params['alicloud_zone']
+    if ids and (not isinstance(ids, list) or len(ids)) < 1:
+        module.fail_json(msg='instance_ids should be a list of instances, aborting')
 
-        if names and (not isinstance(names, list) or len(names)) < 1:
-            module.fail_json(msg='instance_ids should be a list of instances, aborting')
+    if names and (not isinstance(names, list) or len(names)) < 1:
+        module.fail_json(msg='instance_ids should be a list of instances, aborting')
 
-        if names:
-            for name in names:
-                for inst in ecs.get_all_instances(zone_id=zone_id, instance_ids=ids, instance_name=name):
-                    instances.append(get_instance_info(inst))
-                    instance_ids.append(inst.id)
-        else:
-            for inst in ecs.get_all_instances(zone_id=zone_id, instance_ids=ids):
+    if names:
+        for name in names:
+            for inst in ecs.get_all_instances(zone_id=zone_id, instance_ids=ids, instance_name=name):
                 instances.append(get_instance_info(inst))
                 instance_ids.append(inst.id)
+    else:
+        for inst in ecs.get_all_instances(zone_id=zone_id, instance_ids=ids):
+            instances.append(get_instance_info(inst))
+            instance_ids.append(inst.id)
 
-        module.exit_json(changed=False, instance_ids=instance_ids, instances=instances, total=len(instances))
+    module.exit_json(changed=False, instance_ids=instance_ids, instances=instances, total=len(instances))
 
 
 if __name__ == '__main__':
